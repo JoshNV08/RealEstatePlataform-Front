@@ -1,12 +1,25 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Lock, User } from "lucide-react";
+import { loginAdmin, getCurrentUser } from "/src/features/user/authUtils.js";
+import { useNavigate } from "react-router-dom"; 
 
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
+
+  const navigate = useNavigate();
+
+  // Si ya está logueado, redirige automáticamente
+  useEffect(() => {
+    // getCurrentUser debe ser asíncrona o devolver el usuario actual (ajusta según tu auth)
+    const user = getCurrentUser?.();
+    if (user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate]);
 
   const handleChange = (e) => {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -17,15 +30,14 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    // Simula login (cambia por tu lógica real)
-    setTimeout(() => {
-      if (form.email === "admin@inmoelegance.uy" && form.password === "admin123") {
-        window.location.href = "/dashboard";
-      } else {
-        setError("Credenciales incorrectas.");
-      }
-      setLoading(false);
-    }, 1200);
+    loginAdmin(form.email, form.password)
+      .then(() => {
+        navigate("/dashboard"); 
+      })
+      .catch((err) => {
+        setError(err.message);
+      })
+      .finally(() => setLoading(false));
   };
 
   return (

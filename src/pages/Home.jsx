@@ -1,10 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from "react-router-dom";
 import { motion } from 'framer-motion';
+import { collection, getDocs, query, where, orderBy, limit as fbLimit } from "firebase/firestore";
+import { db } from "../services/firestore"; 
 import { Search, MapPin, TrendingUp, Star, Play, ChevronRight, Award, Users, Building, Shield, ArrowRight, Quote, ChevronDown } from 'lucide-react';
 
 function RefinedRealEstateLanding() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isVisible, setIsVisible] = useState({});
+  const [featuredProperties, setFeaturedProperties] = useState([]);
+  const [loadingProperties, setLoadingProperties] = useState(true);
+
+  // Search form state
+  const [searchZone, setSearchZone] = useState("");
+  const [searchType, setSearchType] = useState("");
+  const [searchPrice, setSearchPrice] = useState("");
+
+  const navigate = useNavigate();
+
+  // For debounce effect (if needed in future)
+  const searchZoneRef = useRef();
 
   const heroImages = [
     "https://images.unsplash.com/photo-1564013799919-ab600027ffc6",
@@ -67,49 +82,41 @@ function RefinedRealEstateLanding() {
     { icon: <Shield className="w-6 h-6" />, number: "98%", label: "Satisfacción Cliente" }
   ];
 
-  const properties = [
-    {
-      id: 1,
-      title: "Villa Moderna con Vista Panorámica",
-      location: "Punta del Este",
-      price: 2500000,
-      image: "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=400",
-      bedrooms: 5,
-      bathrooms: 4,
-      area: 450,
-      featured: true
-    },
-    {
-      id: 2,
-      title: "Penthouse de Lujo",
-      location: "Pocitos, Montevideo",
-      price: 1800000,
-      image: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=400",
-      bedrooms: 3,
-      bathrooms: 3,
-      area: 280,
-      featured: true
-    },
-    {
-      id: 3,
-      title: "Casa Familiar Premium",
-      location: "Carrasco, Montevideo",
-      price: 950000,
-      image: "https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=400",
-      bedrooms: 4,
-      bathrooms: 3,
-      area: 320,
-      featured: true
-    }
-  ];
-
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % heroImages.length);
     }, 6000);
     return () => clearInterval(interval);
+  }, [heroImages.length]);
+
+  // Fetch featured properties from Firebase
+  useEffect(() => {
+    setLoadingProperties(true);
+    const fetchFeatured = async () => {
+      try {
+        const q = query(
+          collection(db, "properties"),
+          where("featured", "==", true),
+          orderBy("price", "desc"),
+          fbLimit(3)
+        );
+        const snap = await getDocs(q);
+        setFeaturedProperties(
+          snap.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+        );
+      } catch (err) {
+        setFeaturedProperties([]);
+      } finally {
+        setLoadingProperties(false);
+      }
+    };
+    fetchFeatured();
   }, []);
 
+  // Intersection animations for sections
   const handleIntersection = (entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
@@ -119,7 +126,7 @@ function RefinedRealEstateLanding() {
   };
 
   useEffect(() => {
-    const observer = new IntersectionObserver(handleIntersection, {
+    const observer = new window.IntersectionObserver(handleIntersection, {
       threshold: 0.1
     });
 
@@ -130,8 +137,18 @@ function RefinedRealEstateLanding() {
     return () => observer.disconnect();
   }, []);
 
+  // Search bar handlers
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    if (searchZone) params.append("zone", searchZone);
+    if (searchType) params.append("type", searchType);
+    if (searchPrice) params.append("price", searchPrice);
+    navigate(`/propiedades?${params.toString()}`);
+  };
+
   return (
-    <div className="min-h-screen bg-[#1a1f2e] relative">
+    <div className="min-h-screen bg-[#1a1f2e]  relative">
       {/* Enhanced Hero Section */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -139,7 +156,6 @@ function RefinedRealEstateLanding() {
         className="relative h-screen flex items-center justify-center overflow-hidden"
       >
         <div className="absolute inset-0 z-0">
-          {/* Image Carousel */}
           {heroImages.map((image, index) => (
             <div
               key={index}
@@ -154,15 +170,9 @@ function RefinedRealEstateLanding() {
               />
             </div>
           ))}
-          
-          {/* Enhanced gradient overlay - más suave */}
-          <div className="absolute inset-0 bg-gradient-to-br from-[#1a1f2e]/95 via-[#1e2338]/90 to-[#2a1f1a]/80 opacity-72" />
-          
-          {/* Elegant blur effects */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#1a1f2e]/95 via-[#1e2338]/90 to-[#2a1f1a]/80 opacity-72 " />
           <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-gradient-to-br from-yellow-400/15 via-yellow-200/8 to-transparent rounded-full blur-3xl opacity-60 pointer-events-none" />
           <div className="absolute bottom-0 right-0 w-80 h-80 bg-gradient-to-br from-yellow-500/12 to-transparent rounded-full blur-3xl opacity-40 pointer-events-none" />
-          
-          {/* Floating elements */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             {[...Array(12)].map((_, i) => (
               <div
@@ -179,7 +189,7 @@ function RefinedRealEstateLanding() {
           </div>
         </div>
         
-        <div className="relative z-10 max-w-6xl mx-auto text-center px-4">
+        <div className="relativ z-10 max-w-6xl mx-auto text-center px-4">
           <motion.div
             initial={{ y: 60, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -201,15 +211,16 @@ function RefinedRealEstateLanding() {
             <p className="text-xl md:text-2xl mb-8 font-light max-w-3xl mx-auto text-yellow-200/90 leading-relaxed">
               Propiedades exclusivas para quienes buscan lo mejor.
               <br />
-              <span className="text-yellow-300 font-medium">Vive el lujo, invierte seguro.</span>
+              <span className="text-yellow-300 hidden md:block font-medium">Vive el lujo, invierte seguro.</span>
             </p>
 
             {/* Search Bar Integrado */}
-            <motion.div
+            <motion.form
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.6, duration: 0.8 }}
               className="max-w-4xl mx-auto mb-10"
+              onSubmit={handleSearchSubmit}
             >
               <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 shadow-2xl">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -217,22 +228,33 @@ function RefinedRealEstateLanding() {
                     <input
                       type="text"
                       placeholder="Zona o ciudad"
+                      value={searchZone}
+                      onChange={e => setSearchZone(e.target.value)}
                       className="w-full bg-white/20 border border-white/30 rounded-xl px-4 py-3 text-white placeholder-white/70 focus:bg-white/30 focus:border-yellow-400/50 focus:outline-none transition-all duration-300"
+                      ref={searchZoneRef}
                     />
                   </div>
                   
                   <div className="relative">
-                    <select className="w-full bg-white/20 border border-white/30 rounded-xl px-4 py-3 text-white focus:bg-white/30 focus:border-yellow-400/50 focus:outline-none transition-all duration-300 appearance-none">
+                    <select
+                      value={searchType}
+                      onChange={e => setSearchType(e.target.value)}
+                      className="w-full bg-white/20 border border-white/30 rounded-xl px-4 py-3 text-white focus:bg-white/30 focus:border-yellow-400/50 focus:outline-none transition-all duration-300 appearance-none"
+                    >
                       <option value="">Tipo</option>
-                      <option value="casa">Casa</option>
-                      <option value="apartamento">Apartamento</option>
-                      <option value="terreno">Terreno</option>
+                      <option value="Casa">Casa</option>
+                      <option value="Apartamento">Apartamento</option>
+                      <option value="Campo">Campo</option>
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/70 pointer-events-none" />
                   </div>
                   
                   <div className="relative">
-                    <select className="w-full bg-white/20 border border-white/30 rounded-xl px-4 py-3 text-white focus:bg-white/30 focus:border-yellow-400/50 focus:outline-none transition-all duration-300 appearance-none">
+                    <select
+                      value={searchPrice}
+                      onChange={e => setSearchPrice(e.target.value)}
+                      className="w-full bg-white/20  border border-white/30 rounded-xl px-4 py-3 text-white focus:bg-white/30 focus:border-yellow-400/50 focus:outline-none transition-all duration-300 appearance-none"
+                    >
                       <option value="">Precio</option>
                       <option value="0-100000">$0 - $100,000</option>
                       <option value="100000-500000">$100,000 - $500,000</option>
@@ -244,6 +266,7 @@ function RefinedRealEstateLanding() {
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.98 }}
+                    type="submit"
                     className="bg-gradient-to-r from-yellow-400 to-yellow-300 text-[#1a1f2e] px-6 py-3 rounded-xl font-bold hover:from-yellow-300 hover:to-yellow-200 transition-all duration-300 flex items-center justify-center shadow-lg"
                   >
                     <Search className="w-5 h-5 mr-2" />
@@ -251,12 +274,13 @@ function RefinedRealEstateLanding() {
                   </motion.button>
                 </div>
               </div>
-            </motion.div>
+            </motion.form>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <div className="hidden md:flex flex-col md:flex-row gap-4 justify-center items-center">
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.98 }}
+                onClick={() => navigate("/propiedades")}
                 className="group bg-gradient-to-tr from-yellow-400 via-yellow-300 to-yellow-200 text-[#1a1f2e] px-10 py-4 rounded-xl text-xl font-bold shadow-2xl hover:shadow-yellow-400/20 transition-all duration-300 flex items-center"
               >
                 Explorar Propiedades
@@ -358,7 +382,7 @@ function RefinedRealEstateLanding() {
         </div>
       </section>
 
-      {/* Featured Properties Section - Transición mejorada */}
+      {/* Featured Properties Section */}
       <section className="relative py-20 bg-gradient-to-b from-[#212544] to-[#1e2338]">
         <div className="max-w-7xl mx-auto px-4">
           <motion.div
@@ -373,59 +397,66 @@ function RefinedRealEstateLanding() {
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {properties.map((property, index) => (
-              <motion.div
-                key={property.id}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.2 }}
-                className="group bg-[#1a1f2e]/60 rounded-2xl overflow-hidden border border-yellow-600/20 hover:border-yellow-400/40 shadow-xl hover:shadow-2xl transition-all duration-500 hover:scale-105"
-              >
-                <div className="relative overflow-hidden">
-                  <img 
-                    src={property.image} 
-                    alt={property.title}
-                    className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  {property.featured && (
-                    <div className="absolute top-4 left-4 bg-yellow-400 text-[#1a1f2e] px-3 py-1 rounded-full text-sm font-bold">
-                      Destacada
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                </div>
-                
-                <div className="p-6">
-                  <h3 className="text-xl font-bold text-yellow-100 mb-2">{property.title}</h3>
-                  <p className="text-yellow-300/80 mb-4 flex items-center">
-                    <MapPin className="w-4 h-4 mr-1" />
-                    {property.location}
-                  </p>
-                  
-                  <div className="flex justify-between items-center text-yellow-100/70 text-sm mb-4">
-                    <span>{property.bedrooms} hab</span>
-                    <span>{property.bathrooms} baños</span>
-                    <span>{property.area} m²</span>
+          {loadingProperties ? (
+            <div className="text-yellow-100/70 text-center text-xl py-16">Cargando propiedades destacadas…</div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-8">
+              {featuredProperties.map((property, index) => (
+                <motion.div
+                  key={property.id}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.2 }}
+                  className="group bg-[#1a1f2e]/60 rounded-2xl overflow-hidden border border-yellow-600/20 hover:border-yellow-400/40 shadow-xl hover:shadow-2xl transition-all duration-500 hover:scale-105"
+                >
+                  <div className="relative overflow-hidden">
+                    <img 
+                      src={Array.isArray(property.images) && property.images.length > 0 ? property.images[0] : property.image || "/img/no-image.jpg"} 
+                      alt={property.title}
+                      className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    {property.featured && (
+                      <div className="absolute top-4 left-4 bg-yellow-400 text-[#1a1f2e] px-3 py-1 rounded-full text-sm font-bold">
+                        Destacada
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   </div>
                   
-                  <div className="flex justify-between items-center">
-                    <div className="text-2xl font-bold text-yellow-300">
-                      ${property.price.toLocaleString()}
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold text-yellow-100 mb-2">{property.title}</h3>
+                    <p className="text-yellow-300/80 mb-4 flex items-center">
+                      <MapPin className="w-4 h-4 mr-1" />
+                      {property.location}
+                    </p>
+                    
+                    <div className="flex justify-between items-center text-yellow-100/70 text-sm mb-4">
+                      <span>{property.bedrooms} hab</span>
+                      <span>{property.bathrooms} baños</span>
+                      <span>{property.area} m²</span>
                     </div>
-                    <button className="text-yellow-400 hover:text-yellow-300 transition-colors">
-                      <ArrowRight className="w-5 h-5" />
-                    </button>
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="text-2xl font-bold text-yellow-300">
+                        ${Number(property.price).toLocaleString()}
+                      </div>
+                      <button
+                        className="text-yellow-400 hover:text-yellow-300 transition-colors"
+                        onClick={() => navigate(`/propiedades/${property.id}`)}
+                      >
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Nuestros Clientes Section - Cohesión mejorada */}
+      {/* Nuestros Clientes Section */}
       <section className="relative py-20 bg-gradient-to-b from-[#1e2338] to-[#212544] border-t border-yellow-600/15">
         <div className="max-w-7xl mx-auto px-4">
           <motion.div
@@ -487,7 +518,6 @@ function RefinedRealEstateLanding() {
         viewport={{ once: true }}
         className="relative py-20 bg-gradient-to-tr from-yellow-500 via-yellow-400 to-yellow-200 overflow-hidden"
       >
-        {/* Background Effects */}
         <div className="absolute inset-0">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl" />
           <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-yellow-600/20 rounded-full blur-3xl" />

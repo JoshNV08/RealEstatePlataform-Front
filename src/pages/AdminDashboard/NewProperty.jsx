@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Home, Building2, Trees, X, Plus } from "lucide-react";
-
+import { addProperty } from "../../services/propertyService";
+import { getProfile } from "../../services/firestore";
 // Opciones de tipo y operación
 const typeOptions = [
   { value: "Apartamento", label: "Apartamento" },
@@ -13,7 +14,11 @@ const operationOptions = [
   { value: "Alquiler", label: "Alquiler" },
 ];
 
-export default function NewProperty() {
+// Configuración de Cloudinary
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET;
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_NAME;
+
+export default function NewProperty({currentUser}) {
   const [form, setForm] = useState({
     title: "",
     type: "",
@@ -38,6 +43,16 @@ export default function NewProperty() {
     description: "",
     features: [""],
   });
+  const [loading, setLoading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  
+  const [agentProfile, setAgentProfile] = useState(null);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    getProfile(currentUser.uid).then(data => setAgentProfile(data));
+  }, [currentUser]);
+
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
@@ -56,7 +71,11 @@ export default function NewProperty() {
   };
 
   const addFeature = () => setForm(f => ({ ...f, features: [...f.features, ""] }));
-  const removeFeature = (idx) => setForm(f => ({ ...f, features: f.features.filter((_, i) => i !== idx) }));
+  const removeFeature = (idx) =>
+    setForm(f => ({
+      ...f,
+      features: f.features.filter((_, i) => i !== idx)
+    }));
 
   const handleChange = e => {
     const { name, value, type, checked } = e.target;
@@ -66,9 +85,102 @@ export default function NewProperty() {
     }));
   };
 
-  const handleSubmit = e => {
+  const uploadImageToCloudinary = async (file) => {
+    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+  
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Cloudinary error", data);
+        throw new Error(data.error?.message || "Error subiendo imagen a Cloudinary");
+      }
+      return data.secure_url;
+    } catch (err) {
+
+      console.error("Error real al subir imagen:", err);
+      setUploadError("Error subiendo imágenes: " + err.message);
+      throw err;
+    }
+  };
+
+  const uploadAllImages = async (files) => {
+    return await Promise.all(files.map(uploadImageToCloudinary));
+  };
+
+  
+
+  const getAgentObject = (profile, currentUser) => ({
+    name: (profile?.displayName || currentUser?.email || "Agente") ?? "",
+    email: (profile?.email || currentUser?.email || "") ?? "",
+    number: (profile?.numberPhone || "") ?? "",
+    photo: (profile?.photoURL || "/img/default-agent.png") ?? "/img/default-agent.png",
+    uid: currentUser?.uid || ""
+  });
+
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert("Propiedad creada (maqueta)");
+    setLoading(true);
+    setUploadError("");
+    try {
+      let imageUrls = [];
+      if (form.images.length) {
+        console.log("Intentando subir imágenes:", form.images);
+        imageUrls = await uploadAllImages(form.images);
+        console.log("URLs subidas:", imageUrls);
+      }
+     
+      const featuresClean = form.features.filter((f) => f && f.trim() !== "");
+      const agent = getAgentObject(agentProfile, currentUser);
+  
+      const propertyToSave = {
+        ...form,
+        images: imageUrls,
+        features: featuresClean,
+        createdAt: new Date().toISOString(),
+        agent,
+      };
+      await addProperty(propertyToSave);
+
+      alert("Propiedad creada correctamente");
+      setForm({
+        title: "",
+        type: "",
+        operation: "",
+        location: "",
+        address: "",
+        price: "",
+        currency: "USD",
+        featured: false,
+        images: [],
+        bedrooms: "",
+        bathrooms: "",
+        area: "",
+        garage: false,
+        floor: "",
+        year: "",
+        orientation: "",
+        expenses: "",
+        petsAllowed: false,
+        furnished: false,
+        maxTenants: "",
+        description: "",
+        features: [""],
+      });
+    } catch (err) {
+      setUploadError("Error subiendo imágenes o creando la propiedad: " + err.message);
+      console.error("Error final:", err);
+    } finally {
+      setLoading(false);
+    }
+  
   };
 
   return (
@@ -262,7 +374,7 @@ export default function NewProperty() {
             />
           </div>
         </div>
-        {/* Images */}
+        {/* Imágenes */}
         <div className="mt-8 mb-4">
           <label className="block text-yellow-100 mb-1 font-medium">Imágenes</label>
           <input
@@ -271,6 +383,7 @@ export default function NewProperty() {
             accept="image/*"
             onChange={handleImageChange}
             className="block w-full text-yellow-100"
+            disabled={loading}
           />
           {form.images.length > 0 && (
             <div className="flex flex-wrap gap-4 mt-3">
@@ -282,7 +395,8 @@ export default function NewProperty() {
             </div>
           )}
         </div>
-        {/* Description */}
+        {uploadError && <div className="text-red-400 mb-2">{uploadError}</div>}
+        {/* Descripción */}
         <div className="mb-4">
           <label className="block text-yellow-100 mb-1 font-medium">Descripción</label>
           <textarea
@@ -294,7 +408,7 @@ export default function NewProperty() {
             required
           />
         </div>
-        {/* Features */}
+        {/* Características */}
         <div className="mb-8">
           <label className="block text-yellow-100 mb-1 font-medium">Características</label>
           <div className="flex flex-col gap-2">
@@ -329,8 +443,9 @@ export default function NewProperty() {
           whileTap={{ scale: 0.97 }}
           type="submit"
           className="w-full bg-gradient-to-tr from-yellow-400 via-yellow-300 to-yellow-200 text-[#181c2b] font-bold py-3 rounded-lg shadow-lg hover:from-yellow-300 hover:to-yellow-100 transition-all mt-4"
+          disabled={loading}
         >
-          Crear propiedad
+          {loading ? "Creando..." : "Crear propiedad"}
         </motion.button>
       </motion.form>
     </div>

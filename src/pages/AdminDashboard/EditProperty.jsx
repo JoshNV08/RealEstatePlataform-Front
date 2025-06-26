@@ -2,8 +2,11 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Home, Building2, Trees, X, Plus } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getDoc, doc, updateDoc } from "firebase/firestore";
+import { db } from "../../services/firestore"; // Asegúrate de exportar db desde firestore.js
+// Opcional: import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+// Opcional: import { storage } from "../../services/firestore";
 
-// Opciones de tipo y operación
 const typeOptions = [
   { value: "Apartamento", label: "Apartamento" },
   { value: "Casa", label: "Casa" },
@@ -14,54 +17,47 @@ const operationOptions = [
   { value: "Alquiler", label: "Alquiler" },
 ];
 
-// Mock para demo, reemplazar por fetch a la API real
-const MOCK_PROPERTY = {
-  id: 1,
-  title: "Apartamento con Vista al Mar",
-  type: "Apartamento",
-  operation: "Venta",
-  location: "Punta del Este",
-  address: "Rambla Lorenzo Batlle Pacheco 1234",
-  price: 850000,
-  currency: "USD",
-  featured: true,
-  images: [
-    "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80",
-    "https://images.unsplash.com/photo-1464983953574-0892a716854b?auto=format&fit=crop&w=400&q=80"
-  ],
-  bedrooms: 3,
-  bathrooms: 2,
-  area: 180,
-  garage: true,
-  floor: 9,
-  year: 2022,
-  orientation: "Este",
-  expenses: 320,
-  petsAllowed: true,
-  furnished: true,
-  maxTenants: 6,
-  description: "Descubre este exclusivo apartamento con vistas panorámicas al mar en el corazón de Punta del Este. Espacios luminosos, acabados premium y amenities de lujo para vivir la experiencia costera definitiva.",
-  features: [
-    "Terraza panorámica",
-    "Piscina climatizada",
-    "Gimnasio equipado",
-    "Seguridad 24/7",
-    "Garaje privado"
-  ]
-};
+// Configuración de Cloudinary
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET;
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_NAME;
 
 export default function PropertyEdit() {
   const navigate = useNavigate();
   const { id } = useParams();
-  // En producción, buscar la data por el id y setear el form con la respuesta
   const [form, setForm] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
+  // Fetch property data from Firestore
   useEffect(() => {
-    // Aquí deberías fetch la propiedad por id
-    setTimeout(() => setForm(MOCK_PROPERTY), 200); // Simula carga
-  }, [id]);
+    if (!id) return;
+    const fetchProperty = async () => {
+      setLoading(true);
+      try {
+        const docRef = doc(db, "properties", id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          // Asegura arrays no nulos
+          const data = docSnap.data();
+          setForm({
+            ...data,
+            images: data.images || [],
+            features: data.features && Array.isArray(data.features) ? data.features : [""],
+          });
+        } else {
+          alert("Propiedad no encontrada");
+          navigate("/dashboard");
+        }
+      } catch (error) {
+        alert("Error obteniendo la propiedad");
+        navigate("/dashboard");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProperty();
+  }, [id, navigate]);
 
-  // Images: soporta strings (urls) y nuevos File
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     setForm(f => ({
@@ -96,14 +92,72 @@ export default function PropertyEdit() {
     }));
   };
 
-  const handleSubmit = e => {
-    e.preventDefault();
-    // Aquí iría la lógica de update a la API
-    alert("Propiedad guardada (maqueta)");
-    navigate("/dashboard");
+  // Subir una imagen a Cloudinary
+  const uploadImageToCloudinary = async (file) => {
+    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Error subiendo imagen a Cloudinary");
+      }
+      return data.secure_url;
+    } catch (err) {
+      setUploadError("Error subiendo imágenes: " + err.message);
+      throw err;
+    }
   };
 
-  if (!form) {
+  const uploadAllImages = async (images) => {
+    // Sube solo las nuevas (Files)
+    const urlUploads = await Promise.all(
+      images.map(async img => {
+        if (img instanceof File) {
+          return await uploadImageToCloudinary(img);
+        }
+        return img; // ya es string (URL)
+      })
+    );
+    return urlUploads;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setUploadError("");
+    try {
+      let imageUrls = [];
+      if (form.images.length) {
+        imageUrls = await uploadAllImages(form.images);
+      }
+      // Features sin vacíos
+      const featuresClean = form.features.filter(f => f && f.trim() !== "");
+      const propertyToSave = {
+        ...form,
+        images: imageUrls,
+        features: featuresClean,
+      };
+      // Actualizar en Firestore
+      const docRef = doc(db, "properties", id);
+      await updateDoc(docRef, propertyToSave);
+
+      alert("Propiedad actualizada correctamente");
+      navigate("/dashboard");
+    } catch (err) {
+      setUploadError("Error guardando la propiedad");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading || !form) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#181c2b]">
         <div className="text-yellow-100 text-xl animate-pulse">Cargando propiedad…</div>
@@ -121,6 +175,10 @@ export default function PropertyEdit() {
       >
         <h1 className="text-3xl font-bold text-yellow-100 mb-8 text-center">Editar Propiedad</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
+          {/* ...campos iguales a NewProperty */}
+          {/* ...copiar los inputs uno a uno como en tu código original */}
+          {/* ...todo igual, solo la lógica de submit cambia */}
+          {/* ... */}
           <div>
             <label className="block text-yellow-100 mb-1 font-medium">Título</label>
             <input
@@ -311,6 +369,7 @@ export default function PropertyEdit() {
             accept="image/*"
             onChange={handleImageChange}
             className="block w-full text-yellow-100"
+            disabled={loading}
           />
           {form.images.length > 0 && (
             <div className="flex flex-wrap gap-4 mt-3">
@@ -376,13 +435,15 @@ export default function PropertyEdit() {
             </button>
           </div>
         </div>
+        {uploadError && <div className="text-red-400 mb-2">{uploadError}</div>}
         <motion.button
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           type="submit"
           className="w-full bg-gradient-to-tr from-yellow-400 via-yellow-300 to-yellow-200 text-[#181c2b] font-bold py-3 rounded-lg shadow-lg hover:from-yellow-300 hover:to-yellow-100 transition-all mt-4"
+          disabled={loading}
         >
-          Guardar cambios
+          {loading ? "Guardando..." : "Guardar cambios"}
         </motion.button>
       </motion.form>
     </div>

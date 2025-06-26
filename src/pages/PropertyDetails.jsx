@@ -1,90 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   MapPin, BedDouble, Bath, Ruler, Heart, CheckCircle, Mail, Phone, Tag, Home, Building2, Trees, DollarSign, Calendar, Users
 } from "lucide-react";
-
-// Mock de propiedad principal (en producción puedes recibirlo por props o fetch)
-const property = {
-  id: 1,
-  title: "Apartamento con Vista al Mar",
-  images: [
-    "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80",
-    "https://images.unsplash.com/photo-1464983953574-0892a716854b?auto=format&fit=crop&w=800&q=80",
-    "https://images.unsplash.com/photo-1523217582562-09d0def993a6?auto=format&fit=crop&w=800&q=80"
-  ],
-  type: "Apartamento",
-  operation: "Venta", // o "Alquiler"
-  location: "Punta del Este, Uruguay",
-  address: "Rambla Lorenzo Batlle Pacheco 1234",
-  price: 850000,
-  currency: "USD",
-  bedrooms: 3,
-  bathrooms: 2,
-  area: 180,
-  garage: true,
-  floor: 9,
-  year: 2022,
-  orientation: "Este",
-  expenses: 320, // solo si es alquiler
-  petsAllowed: true,
-  furnished: true,
-  maxTenants: 6,
-  featured: true,
-  description: `Descubre este exclusivo apartamento con vistas panorámicas al mar en el corazón de Punta del Este. Espacios luminosos, acabados premium y amenities de lujo para vivir la experiencia costera definitiva.`,
-  features: [
-    "Terraza panorámica",
-    "Piscina climatizada",
-    "Gimnasio equipado",
-    "Seguridad 24/7",
-    "Garaje privado"
-  ],
-  mapEmbed:
-    "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3340.620435587828!2d-54.94559158481637!3d-34.96138948037386!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95751b2e16c6b5cb%3A0x24f7c8be1d2a1d8f!2sPunta%20del%20Este%2C%20Departamento%20de%20Maldonado!5e0!3m2!1ses-419!2suy!4v1688570000000!5m2!1ses-419!2suy"
-};
-
-// Mock de propiedades similares
-const similarProperties = [
-  {
-    id: 2,
-    title: "Penthouse Exclusivo",
-    image: "https://images.unsplash.com/photo-1523217582562-09d0def993a6?auto=format&fit=crop&w=800&q=80",
-    type: "Apartamento",
-    operation: "Venta",
-    location: "Punta del Este",
-    price: 2100000,
-    bedrooms: 5,
-    bathrooms: 5,
-    area: 380,
-    featured: true
-  },
-  {
-    id: 3,
-    title: "Casa Moderna en Barrio Privado",
-    image: "https://images.unsplash.com/photo-1464983953574-0892a716854b?auto=format&fit=crop&w=800&q=80",
-    type: "Casa",
-    operation: "Venta",
-    location: "La Barra",
-    price: 1250000,
-    bedrooms: 4,
-    bathrooms: 4,
-    area: 320,
-    featured: false
-  },
-  {
-    id: 4,
-    title: "Apartamento Familiar",
-    image: "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=800&q=80",
-    type: "Apartamento",
-    operation: "Alquiler",
-    location: "Punta del Este",
-    price: 2000,
-    bedrooms: 2,
-    bathrooms: 2,
-    area: 110,
-    featured: false
-  }
-];
+import { doc, getDoc, collection, getDocs, query, where, limit } from "firebase/firestore";
+import { db } from "../services/firestore"; 
 
 function getTypeIcon(type) {
   if (type === "Casa") return <Home size={20} className="text-yellow-400" />;
@@ -94,7 +15,89 @@ function getTypeIcon(type) {
 }
 
 export default function PropertyDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [property, setProperty] = useState(null);
   const [mainImg, setMainImg] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [similarProperties, setSimilarProperties] = useState([]);
+
+  // Fetch property by ID
+  useEffect(() => {
+    if (!id) return;
+    const fetchProperty = async () => {
+      setLoading(true);
+      try {
+        const ref = doc(db, "properties", id);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          setProperty({
+            id: snap.id,
+            ...snap.data(),
+            images: snap.data().images || [],
+            features: snap.data().features || [],
+          });
+        } else {
+          alert("Propiedad no encontrada");
+          navigate("/propiedades");
+        }
+      } catch {
+        alert("Error al cargar la propiedad");
+        navigate("/propiedades");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProperty();
+  }, [id, navigate]);
+
+  // Fetch similares
+  useEffect(() => {
+    if (!property) return;
+    const fetchSimilares = async () => {
+      try {
+        // Busca propiedades con el mismo tipo y zona, ignora la actual, solo 3
+        const q = query(
+          collection(db, "properties"),
+          where("type", "==", property.type),
+          where("location", "==", property.location),
+          limit(4)
+        );
+        const snap = await getDocs(q);
+        const similares = snap.docs
+          .filter(docu => docu.id !== property.id)
+          .map(docu => ({
+            id: docu.id,
+            ...docu.data()
+          }))
+          .slice(0, 3);
+        setSimilarProperties(similares);
+      } catch {
+        setSimilarProperties([]);
+      }
+    };
+    fetchSimilares();
+  }, [property]);
+
+  // Safe image getter (compatible con Cloudinary)
+  const getImage = (images, idx = 0) =>
+    Array.isArray(images) && images.length > idx
+      ? images[idx]
+      : "/img/no-image.jpg";
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#181c2b]">
+        <div className="text-yellow-100 text-xl animate-pulse">Cargando propiedad…</div>
+      </div>
+    );
+  }
+  if (!property) return null;
+
+  // --- AGENTE ---
+  const agent = property.agent || {};
+  const agentEmail = agent.email || "";
+  const agentNumber = agent.number || "";
 
   return (
     <div className="min-h-screen bg-[#181c2b] py-12 px-4">
@@ -103,7 +106,7 @@ export default function PropertyDetail() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2 h-80 md:h-[420px] rounded-2xl overflow-hidden relative group">
             <img
-              src={property.images[mainImg]}
+              src={getImage(property.images, mainImg)}
               alt={property.title}
               className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
             />
@@ -117,7 +120,7 @@ export default function PropertyDetail() {
                     onClick={() => setMainImg(idx)}
                     aria-label={`Vista ${idx + 1}`}
                   >
-                    <img src={img} alt={`Vista ${idx + 1}`} className="object-cover w-full h-full" />
+                    <img src={getImage(property.images, idx)} alt={`Vista ${idx + 1}`} className="object-cover w-full h-full" />
                   </button>
                 ))}
               </div>
@@ -137,7 +140,7 @@ export default function PropertyDetail() {
                 aria-label={`Vista extra ${idx + 2}`}
               >
                 <img
-                  src={img}
+                  src={getImage(property.images, idx + 1)}
                   alt={`Vista extra ${idx + 2}`}
                   className="w-full h-full object-cover transition-all duration-300 hover:scale-105"
                 />
@@ -163,8 +166,10 @@ export default function PropertyDetail() {
           <div className="flex items-center gap-3 text-yellow-100/80 mb-3">
             <MapPin size={20} className="text-yellow-400" />
             <span>{property.location}</span>
-            <span className="text-yellow-100/60">|</span>
-            <span className="text-yellow-100/70">{property.address}</span>
+            {property.address && <>
+              <span className="text-yellow-100/60">|</span>
+              <span className="text-yellow-100/70">{property.address}</span>
+            </>}
           </div>
           <div className="flex items-center gap-8 mb-6 text-yellow-100/90 flex-wrap">
             <div className="flex items-center gap-2">
@@ -212,13 +217,13 @@ export default function PropertyDetail() {
           </div>
           <div className="text-3xl font-bold text-yellow-300 mb-4">
             {property.currency === "USD" && "$"}
-            {property.price.toLocaleString()}
+            {Number(property.price).toLocaleString()}
             <span className="text-yellow-100 text-lg font-medium ml-2">
               {property.operation === "Alquiler" ? " / mes" : ""}
             </span>
           </div>
           {/* Si es alquiler, mostrar gastos comunes */}
-          {property.operation === "Alquiler" && (
+          {property.operation === "Alquiler" && property.expenses && (
             <div className="mb-4 flex items-center gap-4">
               <span className="text-yellow-200 font-semibold">Gastos comunes:</span>
               <span className="text-yellow-100/90 text-lg font-bold">
@@ -245,7 +250,7 @@ export default function PropertyDetail() {
           <div>
             <h3 className="text-xl text-yellow-100 font-semibold mb-2">Características</h3>
             <ul className="flex flex-wrap gap-4">
-              {property.features.map((feat, idx) => (
+              {(property.features || []).map((feat, idx) => (
                 <li key={idx} className="flex items-center gap-2 bg-[#232742]/80 border border-yellow-600/20 text-yellow-100/90 px-4 py-2 rounded-lg">
                   <CheckCircle size={18} className="text-yellow-400" />
                   {feat}
@@ -261,12 +266,29 @@ export default function PropertyDetail() {
             <p className="text-yellow-100/80 mb-6">
               Contáctanos para agendar una visita o recibir más información personalizada.
             </p>
-            <button className="w-full bg-gradient-to-tr from-yellow-400 via-yellow-300 to-yellow-200 text-[#181c2b] font-bold py-3 rounded-lg shadow-md hover:from-yellow-300 hover:to-yellow-100 transition-all mb-3 flex items-center justify-center gap-2">
-              <Mail size={20} /> Enviar Consulta
-            </button>
-            <button className="w-full bg-[#181c2b] text-yellow-100 font-bold py-3 rounded-lg shadow-md border border-yellow-400/50 hover:bg-[#232742] transition-all flex items-center justify-center gap-2">
-              <Phone size={20} /> Llamar Ahora
-            </button>
+            {agentEmail && (
+              <a
+                href={`mailto:${agentEmail}?subject=Consulta por propiedad: ${encodeURIComponent(property.title)}`}
+                className="w-full bg-gradient-to-tr from-yellow-400 via-yellow-300 to-yellow-200 text-[#181c2b] font-bold py-3 rounded-lg shadow-md hover:from-yellow-300 hover:to-yellow-100 transition-all mb-3 flex items-center justify-center gap-2"
+              >
+                <Mail size={20} /> Enviar Consulta
+              </a>
+            )}
+            {agentNumber && (
+              <a
+                href={`tel:${agentNumber}`}
+                className="w-full bg-[#181c2b] text-yellow-100 font-bold py-3 rounded-lg shadow-md border border-yellow-400/50 hover:bg-[#232742] transition-all flex items-center justify-center gap-2"
+              >
+                <Phone size={20} /> Llamar Ahora
+              </a>
+            )}
+            {agent && (
+              <div className="mt-6 text-yellow-100/80 text-sm flex flex-col gap-1">
+                <span><b>Agente:</b> {agent.name}</span>
+                {agentEmail && <span><b>Email:</b> {agentEmail}</span>}
+                {agentNumber && <span><b>Teléfono:</b> {agentNumber}</span>}
+              </div>
+            )}
           </div>
           <button className="mt-10 w-full flex items-center justify-center gap-2 text-yellow-400 hover:text-yellow-200 font-semibold transition-all">
             <Heart size={22} /> Añadir a favoritos
@@ -275,21 +297,23 @@ export default function PropertyDetail() {
       </div>
 
       {/* Mapa */}
-      <div className="max-w-6xl mx-auto mb-14">
-        <h3 className="text-2xl text-yellow-100 font-semibold mb-4">Ubicación</h3>
-        <div className="rounded-2xl overflow-hidden border border-yellow-600/20 shadow-lg h-72">
-          <iframe
-            src={property.mapEmbed}
-            width="100%"
-            height="100%"
-            allowFullScreen=""
-            loading="lazy"
-            title="Ubicación en mapa"
-            className="w-full h-full"
-            style={{ border: 0 }}
-          ></iframe>
+      {property.mapEmbed && (
+        <div className="max-w-6xl mx-auto mb-14">
+          <h3 className="text-2xl text-yellow-100 font-semibold mb-4">Ubicación</h3>
+          <div className="rounded-2xl overflow-hidden border border-yellow-600/20 shadow-lg h-72">
+            <iframe
+              src={property.mapEmbed}
+              width="100%"
+              height="100%"
+              allowFullScreen=""
+              loading="lazy"
+              title="Ubicación en mapa"
+              className="w-full h-full"
+              style={{ border: 0 }}
+            ></iframe>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Carousel de similares */}
       <div className="max-w-6xl mx-auto mb-8">
@@ -309,7 +333,7 @@ export default function PropertyDetail() {
                 )}
                 <div className="relative h-40 overflow-hidden">
                   <img
-                    src={prop.image}
+                    src={Array.isArray(prop.images) && prop.images.length > 0 ? prop.images[0] : prop.image || "/img/no-image.jpg"}
                     alt={prop.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
@@ -345,7 +369,7 @@ export default function PropertyDetail() {
                   </div>
                   <div className="text-xl font-bold text-yellow-300">
                     {prop.currency === "USD" || !prop.currency ? "$" : prop.currency}
-                    {prop.price.toLocaleString()}
+                    {Number(prop.price).toLocaleString()}
                     <span className="text-yellow-100 font-medium text-sm ml-1">
                       {prop.operation === "Alquiler" ? " / mes" : ""}
                     </span>

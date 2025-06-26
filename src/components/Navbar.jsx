@@ -1,38 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Heart, User } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Menu, X, Heart, User, LogOut } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { getAuth } from 'firebase/auth';
+import { useSelector, useDispatch } from 'react-redux';
+import { remove } from '../store/wishlistSlice';
 
-
-const initialWishlist = [
-  {
-    id: 1,
-    title: "Apartamento con Vista al Mar",
-    image: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80",
-    location: "Punta del Este",
-    price: 850000,
-    bedrooms: 3,
-    bathrooms: 2,
-    area: 180,
-  },
-  {
-    id: 2,
-    title: "Casa Moderna en Barrio Privado",
-    image: "https://images.unsplash.com/photo-1464983953574-0892a716854b?auto=format&fit=crop&w=400&q=80",
-    location: "La Barra",
-    price: 1250000,
-    bedrooms: 4,
-    bathrooms: 4,
-    area: 320,
-  },
-];
-
+// Sidebar para el wishlist, igual que antes
 function WishlistSidebar({ open, onClose, wishlist, onRemove }) {
   return (
     <AnimatePresence>
       {open && (
         <>
-          {/* Overlay */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.7 }}
@@ -40,7 +19,6 @@ function WishlistSidebar({ open, onClose, wishlist, onRemove }) {
             className="fixed inset-0 bg-black z-[80]"
             onClick={onClose}
           />
-          {/* Sidebar */}
           <motion.div
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
@@ -150,18 +128,14 @@ function WishlistSidebar({ open, onClose, wishlist, onRemove }) {
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [wishlistOpen, setWishlistOpen] = useState(false);
-  const [wishlist, setWishlist] = useState(() => {
-    // Load from localStorage if available
-    const stored = localStorage.getItem("wishlist");
-    return stored ? JSON.parse(stored) : initialWishlist;
-  });
   const [scrolled, setScrolled] = useState(false);
+  const [user, setUser] = useState(null);
   const location = useLocation();
+  const navigate = useNavigate();
 
-  // Persist wishlist on change
-  useEffect(() => {
-    localStorage.setItem("wishlist", JSON.stringify(wishlist));
-  }, [wishlist]);
+  // Redux
+  const wishlist = useSelector(state => state.wishlist.items);
+  const dispatch = useDispatch();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -175,24 +149,45 @@ const Navbar = () => {
     setIsOpen(false);
   }, [location]);
 
+  // Detecta usuario logueado Firebase (simple)
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = auth.onAuthStateChanged(setUser);
+    return () => unsubscribe();
+  }, []);
+
+  // Remove from wishlist
+  const handleRemoveFromWishlist = (id) => {
+    dispatch(remove(id));
+  };
+
+  // Logout
+  const handleLogout = async () => {
+    const auth = getAuth();
+    await auth.signOut();
+    setUser(null);
+    navigate("/");
+  };
+
+  // Links para clientes (no logueados)
   const navItems = [
     { name: 'Inicio', href: '/' },
     { name: 'Propiedades', href: '/propiedades' },
     { name: 'Contacto',  href: '/contacto' },
     { name: 'Sobre Nosotros', href: '/sobre-nosotros' },
-    { name: '',nameMobile:'Ingreso Agentes', icon: <User size={26} />, href: '/ingreso' },
+    { name: '', nameMobile: 'Ingreso Agentes', icon: <User size={26} />, href: '/ingreso' },
   ];
 
-  // Remove from wishlist
-  const handleRemoveFromWishlist = (id) => {
-    setWishlist(wishlist => wishlist.filter(item => item.id !== id));
-  };
+  // Links para agentes/admins logueados
+  const adminNavItems = [
+    { name: 'Dashboard', href: '/dashboard' },
+    { name: 'Mi Perfil', href: '/dashboard/perfil' },
+  ];
 
   return (
     <>
-      <motion.nav
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
+      <nav
+      
         className="fixed w-full bg-[#181c2b] z-50 transition-all duration-300 border-b border-yellow-600/20"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 bg-[#181c2b]">
@@ -207,27 +202,51 @@ const Navbar = () => {
             {/* Desktop Navigation */}
             <div className="hidden md:block">
               <div className="ml-10 flex items-center space-x-8">
-                {navItems.map((item) => (
+                {!user && navItems.map((item) => (
                   <Link
-                    key={item.name}
+                    key={item.href}
                     to={item.href}
                     className={`flex items-center space-x-2 text-yellow-100/80 hover:text-yellow-200 transition-colors duration-200 font-semibold ${
                       location.pathname === item.href ? 'text-yellow-300' : ''
                     }`}
                   >
-                    
                     <span>{item.icon}{item.name}</span>
                   </Link>
                 ))}
-                {/* Wishlist button */}
-                <button onClick={() => setWishlistOpen(true)} className="relative ml-4" aria-label="Wishlist">
-                  <Heart className="text-yellow-100/80" size={26} />
-                  {wishlist.length > 0 && (
-                    <span className="absolute -top-1 -right-2 bg-yellow-300 text-[#181c2b] text-xs font-bold w-4 h-4 flex items-center justify-center rounded-full">
-                      {wishlist.length}
-                    </span>
-                  )}
-                </button>
+                {user && (
+                  <>
+                    {adminNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        to={item.href}
+                        className={`flex items-center space-x-2 text-yellow-100/80 hover:text-yellow-200 transition-colors duration-200 font-semibold ${
+                          location.pathname === item.href ? 'text-yellow-300' : ''
+                        }`}
+                      >
+                        <span>{item.icon}{item.name}</span>
+                      </Link>
+                    ))}
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center space-x-2 text-yellow-100/80 hover:text-yellow-300 transition-colors duration-200 font-semibold"
+                    >
+                      <LogOut size={22} /> <span>Cerrar sesión</span>
+                    </button>
+                    <span className="ml-2 text-yellow-200 font-bold truncate max-w-[160px]">{user.displayName || user.email}</span>
+                  </>
+                )}
+
+                {/* Wishlist button solo para clientes */}
+                {!user && (
+                  <button onClick={() => setWishlistOpen(true)} className="relative ml-4" aria-label="Wishlist">
+                    <Heart className="text-yellow-100/80" size={26} />
+                    {wishlist.length > 0 && (
+                      <span className="absolute -top-1 -right-2 bg-yellow-300 text-[#181c2b] text-xs font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                        {wishlist.length}
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -252,9 +271,9 @@ const Navbar = () => {
             className="md:hidden bg-[#181c2b] border-t border-yellow-600/20 shadow-lg"
           >
             <div className="px-2 pt-4 pb-6 space-y-2">
-              {navItems.map((item) => (
+              {!user && navItems.map((item) => (
                 <Link
-                  key={item.name}
+                  key={item.href}
                   to={item.href}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-md text-yellow-100/80 hover:text-yellow-200 hover:bg-yellow-600/10 font-semibold ${
                     location.pathname === item.href ? 'text-yellow-300 bg-yellow-600/10' : ''
@@ -264,27 +283,56 @@ const Navbar = () => {
                   <span>{item.nameMobile}{item.name}</span>
                 </Link>
               ))}
-              {/* Wishlist for mobile */}
-              <button onClick={() => setWishlistOpen(true)} className="relative ml-2 flex items-center" aria-label="Wishlist">
-            
-                {wishlist.length > 0 && (
-                  <span className="ml-1 bg-yellow-400 text-[#181c2b] text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full">
-                    {wishlist.length}
-                  </span>
-                )}
-                <span className="ml-2 text-yellow-100/80 font-semibold">Favoritos</span>
-              </button>
+              {user && (
+                <>
+                  {adminNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      to={item.href}
+                      className={`flex items-center space-x-3 px-4 py-3 rounded-md text-yellow-100/80 hover:text-yellow-200 hover:bg-yellow-600/10 font-semibold ${
+                        location.pathname === item.href ? 'text-yellow-300 bg-yellow-600/10' : ''
+                      }`}
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <span>{item.icon}{item.name}</span>
+                    </Link>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setIsOpen(false);
+                      handleLogout();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-3 rounded-md text-yellow-100/80 hover:text-yellow-200 hover:bg-yellow-600/10 font-semibold"
+                  >
+                    <LogOut size={22} /> <span>Cerrar sesión</span>
+                  </button>
+                  <span className="block px-4 py-2 text-yellow-200 font-bold truncate max-w-[160px]">{user.displayName || user.email}</span>
+                </>
+              )}
+              {/* Wishlist for mobile solo para clientes */}
+              {!user && (
+                <button onClick={() => setWishlistOpen(true)} className="relative ml-2 flex items-center" aria-label="Wishlist">
+                  {wishlist.length > 0 && (
+                    <span className="ml-1 bg-yellow-400 text-[#181c2b] text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full">
+                      {wishlist.length}
+                    </span>
+                  )}
+                  <span className="ml-2 text-yellow-100/80 font-semibold">Favoritos</span>
+                </button>
+              )}
             </div>
           </motion.div>
         )}
-      </motion.nav>
+      </nav>
       {/* Sidebar/modal for wishlist */}
-      <WishlistSidebar
-        open={wishlistOpen}
-        onClose={() => setWishlistOpen(false)}
-        wishlist={wishlist}
-        onRemove={handleRemoveFromWishlist}
-      />
+      {!user && (
+        <WishlistSidebar
+          open={wishlistOpen}
+          onClose={() => setWishlistOpen(false)}
+          wishlist={wishlist}
+          onRemove={handleRemoveFromWishlist}
+        />
+      )}
     </>
   );
 };
