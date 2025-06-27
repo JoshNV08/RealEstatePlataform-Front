@@ -4,7 +4,9 @@ import { motion } from 'framer-motion';
 import { collection, getDocs, query, where, orderBy, limit as fbLimit } from "firebase/firestore";
 import { db } from "../services/firestore"; 
 import { Search, MapPin, TrendingUp, Star, Play, ChevronRight, Award, Users, Building, Shield, ArrowRight, Quote, ChevronDown } from 'lucide-react';
-
+import home1 from '../assets/home1.webp';
+import home2 from '../assets/home2.webp';
+import home3 from '../assets/home3.webp';
 function RefinedRealEstateLanding() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isVisible, setIsVisible] = useState({});
@@ -22,9 +24,9 @@ function RefinedRealEstateLanding() {
   const searchZoneRef = useRef();
 
   const heroImages = [
-    "https://images.unsplash.com/photo-1564013799919-ab600027ffc6",
-    "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9",
-    "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c"
+    home1,
+    home2,
+    home3
   ];
 
   const features = [
@@ -153,7 +155,7 @@ function RefinedRealEstateLanding() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="relative h-screen flex items-center justify-center overflow-hidden"
+        className="relative min-h-[91svh]  flex items-center justify-center overflow-hidden"
       >
         <div className="absolute inset-0 z-0">
           {heroImages.map((image, index) => (
@@ -177,7 +179,7 @@ function RefinedRealEstateLanding() {
             {[...Array(12)].map((_, i) => (
               <div
                 key={i}
-                className="absolute w-1 h-1 bg-yellow-300/30 rounded-full animate-pulse"
+                className="absolute w-1 h-1 bg-yellow-300/20 rounded-full animate-pulse"
                 style={{
                   left: `${Math.random() * 100}%`,
                   top: `${Math.random() * 100}%`,
@@ -189,7 +191,7 @@ function RefinedRealEstateLanding() {
           </div>
         </div>
         
-        <div className="relativ z-10 max-w-6xl mx-auto text-center px-4">
+        <div className="relative z-10 max-w-6xl mx-auto text-center px-4">
           <motion.div
             initial={{ y: 60, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}

@@ -195,7 +195,7 @@ const Navbar = () => {
             {/* Logo */}
             <motion.div whileHover={{ scale: 1.05 }} className="flex-shrink-0">
               <Link to="/" className="text-2xl font-bol tracking-tight">
-                <img src="./logo2.png" className='w-20 h-20' alt="Logo" />
+                <img src="./logo2.png" className='w-16 h-16' alt="Logo" />
               </Link>
             </motion.div>
 

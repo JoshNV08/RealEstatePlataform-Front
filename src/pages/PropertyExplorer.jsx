@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useContext } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -21,8 +21,6 @@ import { db } from "../services/firestore";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from 'react-redux';
 import { add, remove } from '../store/wishlistSlice';
-
-
 
 // Opciones de filtro mejoradas
 const locations = ["Todas", "Punta del Este", "La Barra", "Punta Ballena"];
@@ -81,15 +79,14 @@ const DEFAULT_AGENT = {
   photo: "/img/default-agent.png",
 };
 
-
 export default function PropertyExplorer() {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const dispatch = useDispatch();
   const wishlist = useSelector(state => state.wishlist.items);
-  
+
   const isInWishlist = (id) => wishlist.some(item => item.id === id);
-  
+
   // Filtros y vistas (leer de query params para deep-linking desde landing)
   const [search, setSearch] = useState(getInitialParam("zone", ""));
   const [filterLocation, setFilterLocation] = useState(getInitialParam("zone", "Todas"));
@@ -112,8 +109,12 @@ export default function PropertyExplorer() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Drawer sheet mobile
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
   // Navegación reactiva para query params
   const location = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     // Si cambia la URL desde el landing, sincronizar filtros
     const params = new URLSearchParams(location.search);
@@ -195,9 +196,6 @@ export default function PropertyExplorer() {
 
   const isFeatured = (prop) =>
     (Number(prop.wishlistCount) || 0) + (Number(prop.consultCount) || 0) >= 3;
-  
-  // Para estadísticas en el footer
-  const featuredCount = filteredProperties.filter(isFeatured).length;
 
   // Para estadísticas en el footer
   const avgRating = filteredProperties.length
@@ -211,14 +209,6 @@ export default function PropertyExplorer() {
       ? prop.images[0]
       : prop.image || "/img/no-image.jpg";
 
-  // Rating fallback
-  const getRating = (prop) =>
-    typeof prop.rating === "number"
-      ? prop.rating
-      : prop.rating
-        ? Number(prop.rating)
-        : 4.5;
-
   // Agente info
   const getAgent = (prop) => {
     if (prop.agent && (prop.agent.name || prop.agent.photo)) {
@@ -230,10 +220,7 @@ export default function PropertyExplorer() {
     return DEFAULT_AGENT;
   };
 
-
-
   // Navegación para sincronizar filtros en la url (opcional)
-  const navigate = useNavigate();
   const handleFilterChange = (key, value) => {
     const params = new URLSearchParams(location.search);
     if (key === "zone") {
@@ -252,11 +239,25 @@ export default function PropertyExplorer() {
     navigate({ search: params.toString() }, { replace: true });
   };
 
+  // Conteo de filtros activos para badge en botón (opcional UX extra)
+  const filtersCount = useMemo(() => {
+    let c = 0;
+    if (search) c++;
+    if (filterLocation !== "Todas") c++;
+    if (filterType !== "Todas") c++;
+    if (filterOperation !== "Todas") c++;
+    if (minPrice) c++;
+    if (maxPrice) c++;
+    if (filterBedrooms !== "Cualquiera") c++;
+    if (filterBathrooms !== "Cualquiera") c++;
+    return c;
+  }, [search, filterLocation, filterType, filterOperation, minPrice, maxPrice, filterBedrooms, filterBathrooms]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1a1f2e] via-[#1e2338] to-[#212544]">
-      {/* Hero Section mejorado */}
+      {/* Hero Section */}
       <div className="relative pt-16 pb-12 px-4 overflow-hidden">
-        {/* Efectos de fondo elegantes */}
+        {/* Efectos de fondo */}
         <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-gradient-to-br from-yellow-400/12 via-yellow-200/6 to-transparent rounded-full blur-3xl opacity-60 pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-80 h-80 bg-gradient-to-br from-yellow-500/8 to-transparent rounded-full blur-3xl opacity-40 pointer-events-none" />
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -273,7 +274,6 @@ export default function PropertyExplorer() {
             />
           ))}
         </div>
-
         <div className="max-w-7xl mx-auto relative z-10">
           <motion.div
             initial={{ y: 30, opacity: 0 }}
@@ -297,194 +297,341 @@ export default function PropertyExplorer() {
               Utiliza nuestros filtros avanzados para descubrir propiedades que se adapten perfectamente a tus necesidades y presupuesto.
             </p>
           </motion.div>
-          
-          {/* Barra de filtros ampliada */}
-          <motion.div
-            initial={{ y: 40, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.3, duration: 0.8 }}
-            className="bg-white/8 backdrop-blur-md border border-white/15 rounded-2xl p-6 shadow-2xl max-w-6xl mx-auto"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-8 gap-4 mb-4">
-              {/* Texto de búsqueda */}
-              <div className="relative md:col-span-2">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={e => handleFilterChange("zone", e.target.value)}
-                  placeholder="Buscar por nombre o zona..."
-                  className="w-full pl-12 pr-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
-                />
-              </div>
-              {/* Zona */}
-              <div className="relative">
-                <select
-                  value={filterLocation}
-                  onChange={e => handleFilterChange("zone", e.target.value)}
-                  className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
-                >
-                  {locations.map((loc) => (
-                    <option key={loc} value={loc} className="bg-[#1a1f2e] text-yellow-100">{loc}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
-              </div>
-              {/* Tipo */}
-              <div className="relative">
-                <select
-                  value={filterType}
-                  onChange={e => handleFilterChange("type", e.target.value)}
-                  className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
-                >
-                  {types.map((type) => (
-                    <option key={type} value={type} className="bg-[#1a1f2e] text-yellow-100">{type}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
-              </div>
-              {/* Operación */}
-              <div className="relative">
-                <select
-                  value={filterOperation}
-                  onChange={e => handleFilterChange("operation", e.target.value)}
-                  className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
-                >
-                  {operations.map((op) => (
-                    <option key={op} value={op} className="bg-[#1a1f2e] text-yellow-100">{op}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
-              </div>
-              {/* Precio */}
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  value={minPrice}
-                  onChange={e => setMinPrice(e.target.value)}
-                  placeholder="Precio mín."
-                  className="px-3 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  value={maxPrice}
-                  onChange={e => setMaxPrice(e.target.value)}
-                  placeholder="Precio máx."
-                  className="px-3 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
-                />
-              </div>
-              {/* Dormitorios */}
-              <div className="relative">
-                <select
-                  value={filterBedrooms}
-                  onChange={e => setFilterBedrooms(e.target.value)}
-                  className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
-                >
-                  {bedrooms.map((n) => (
-                    <option key={n} value={n} className="bg-[#1a1f2e] text-yellow-100">{n} {n !== "Cualquiera" ? "hab" : ""}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
-              </div>
-              {/* Baños */}
-              <div className="relative">
-                <select
-                  value={filterBathrooms}
-                  onChange={e => setFilterBathrooms(e.target.value)}
-                  className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
-                >
-                  {bathrooms.map((n) => (
-                    <option key={n} value={n} className="bg-[#1a1f2e] text-yellow-100">{n} {n !== "Cualquiera" ? "baños" : ""}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-white/10">
-              <div className="flex items-center gap-3">
-                <span className="text-yellow-200 font-medium text-sm">Ordenar por:</span>
-                <select
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value)}
-                  className="appearance-none px-3 py-2 rounded-lg border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-8 text-sm"
-                >
-                  <option value="price-desc" className="bg-[#1a1f2e] text-yellow-100">Precio (mayor a menor)</option>
-                  <option value="price-asc" className="bg-[#1a1f2e] text-yellow-100">Precio (menor a mayor)</option>
-                  <option value="rating" className="bg-[#1a1f2e] text-yellow-100">Mejor valoradas</option>
-                  <option value="area" className="bg-[#1a1f2e] text-yellow-100">Mayor superficie</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                {isMobile ? (
-                  <>
-                    <span className="text-yellow-200 font-medium text-sm mr-2">Vista:</span>
-                    <button
-                      className={`flex items-center gap-1 rounded-lg px-3 py-2 font-medium transition border text-sm ${
-                        mobileView === "card"
-                          ? "bg-gradient-to-r from-yellow-400 to-yellow-300 text-[#1a1f2e] border-yellow-300 shadow-lg"
-                          : "bg-white/10 text-yellow-100 border-white/20 hover:bg-yellow-400/20"
-                      }`}
-                      onClick={() => setMobileView("card")}
-                    >
-                      <LayoutGrid size={16}/> Cards
-                    </button>
-                    <button
-                      className={`flex items-center gap-1 rounded-lg px-3 py-2 font-medium transition border text-sm ${
-                        mobileView === "list"
-                          ? "bg-gradient-to-r from-yellow-400 to-yellow-300 text-[#1a1f2e] border-yellow-300 shadow-lg"
-                          : "bg-white/10 text-yellow-100 border-white/20 hover:bg-yellow-400/20"
-                      }`}
-                      onClick={() => setMobileView("list")}
-                    >
-                      <List size={16}/> Lista
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-yellow-200 font-medium text-sm mr-2">Vista:</span>
-                    {SIZE_OPTIONS.map(opt => (
-                      <button
-                        key={opt.key}
-                        className={`flex items-center gap-1 rounded-lg px-3 py-2 font-medium transition border text-sm ${
-                          cardSize === opt.key
-                            ? "bg-gradient-to-r from-yellow-400 to-yellow-300 text-[#1a1f2e] border-yellow-300 shadow-lg"
-                            : "bg-white/10 text-yellow-100 border-white/20 hover:bg-yellow-400/20"
-                        }`}
-                        onClick={() => setCardSize(opt.key)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </>
+
+          {/* --- MOBILE FILTER BUTTON --- */}
+          {isMobile && (
+            <>
+              <button
+                onClick={() => setShowMobileFilters(true)}
+                className="fixed z-50 bottom-4 left-1/2 -translate-x-1/2 bg-yellow-400 text-[#1a1f2e] font-bold px-7 py-3 rounded-full shadow-lg flex items-center gap-2"
+              >
+                <Filter className="w-5 h-5" />
+                Filtrar
+                {filtersCount > 0 && (
+                  <span className="ml-2 bg-[#1a1f2e] text-yellow-300 text-xs rounded-full px-2 py-0.5">{filtersCount}</span>
                 )}
+              </button>
+
+              {/* --- MOBILE FILTER SHEET --- */}
+              {showMobileFilters && (
+                <div className="fixed inset-0 z-50 pt-20 bg-black/60 flex">
+                  <div className="bg-[#191d2c] w-full h-full overflow-y-auto p-6 relative animate-slide-in-up">
+                    <button
+                      onClick={() => setShowMobileFilters(false)}
+                      className="absolute top-3 right-4 text-yellow-400 text-2xl font-bold"
+                      aria-label="Cerrar filtros"
+                    >
+                      ×
+                    </button>
+                    <h2 className="text-yellow-100 text-xl font-bold mb-4 flex items-center gap-2">
+                      <Filter /> Filtros
+                    </h2>
+                    <div className="flex flex-col gap-4">
+                      <div className="relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400" />
+                        <input
+                          type="text"
+                          value={search}
+                          onChange={e => handleFilterChange("zone", e.target.value)}
+                          placeholder="Buscar por nombre o zona..."
+                          className="w-full pl-12 pr-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
+                        />
+                      </div>
+                      <div className="relative">
+                        <select
+                          value={filterLocation}
+                          onChange={e => handleFilterChange("zone", e.target.value)}
+                          className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                        >
+                          {locations.map((loc) => (
+                            <option key={loc} value={loc} className="bg-[#1a1f2e] text-yellow-100">{loc}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                      </div>
+                      <div className="relative">
+                        <select
+                          value={filterType}
+                          onChange={e => handleFilterChange("type", e.target.value)}
+                          className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                        >
+                          {types.map((type) => (
+                            <option key={type} value={type} className="bg-[#1a1f2e] text-yellow-100">{type}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                      </div>
+                      <div className="relative">
+                        <select
+                          value={filterOperation}
+                          onChange={e => handleFilterChange("operation", e.target.value)}
+                          className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                        >
+                          {operations.map((op) => (
+                            <option key={op} value={op} className="bg-[#1a1f2e] text-yellow-100">{op}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          value={minPrice}
+                          onChange={e => setMinPrice(e.target.value)}
+                          placeholder="Precio mín."
+                          className="px-3 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          value={maxPrice}
+                          onChange={e => setMaxPrice(e.target.value)}
+                          placeholder="Precio máx."
+                          className="px-3 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
+                        />
+                      </div>
+                      <div className="relative">
+                        <select
+                          value={filterBedrooms}
+                          onChange={e => setFilterBedrooms(e.target.value)}
+                          className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                        >
+                          {bedrooms.map((n) => (
+                            <option key={n} value={n} className="bg-[#1a1f2e] text-yellow-100">{n} {n !== "Cualquiera" ? "hab" : ""}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                      </div>
+                      <div className="relative">
+                        <select
+                          value={filterBathrooms}
+                          onChange={e => setFilterBathrooms(e.target.value)}
+                          className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                        >
+                          {bathrooms.map((n) => (
+                            <option key={n} value={n} className="bg-[#1a1f2e] text-yellow-100">{n} {n !== "Cualquiera" ? "baños" : ""}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-yellow-200 font-medium text-sm">Ordenar por:</span>
+                        <select
+                          value={sortBy}
+                          onChange={e => setSortBy(e.target.value)}
+                          className="appearance-none px-3 py-2 rounded-lg border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-8 text-sm"
+                        >
+                          <option value="price-desc" className="bg-[#1a1f2e] text-yellow-100">Precio (mayor a menor)</option>
+                          <option value="price-asc" className="bg-[#1a1f2e] text-yellow-100">Precio (menor a mayor)</option>
+                          <option value="rating" className="bg-[#1a1f2e] text-yellow-100">Mejor valoradas</option>
+                          <option value="area" className="bg-[#1a1f2e] text-yellow-100">Mayor superficie</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowMobileFilters(false)}
+                      className="mt-6 w-full bg-gradient-to-r from-yellow-400 to-yellow-300 text-[#1a1f2e] font-bold py-3 rounded-xl shadow-lg hover:from-yellow-300 hover:to-yellow-200 transition-all"
+                    >
+                      Aplicar filtros
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          {/* --- DESKTOP FILTERS --- */}
+          {!isMobile && (
+            <motion.div
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.8 }}
+              className="bg-white/8 backdrop-blur-md border border-white/15 rounded-2xl p-6 shadow-2xl max-w-6xl mx-auto"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-8 gap-4 mb-4">
+                {/* ... Los filtros desktop iguales ... */}
+                <div className="relative md:col-span-2">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={e => handleFilterChange("zone", e.target.value)}
+                    placeholder="Buscar por nombre o zona..."
+                    className="w-full pl-12 pr-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
+                  />
+                </div>
+                <div className="relative">
+                  <select
+                    value={filterLocation}
+                    onChange={e => handleFilterChange("zone", e.target.value)}
+                    className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                  >
+                    {locations.map((loc) => (
+                      <option key={loc} value={loc} className="bg-[#1a1f2e] text-yellow-100">{loc}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                </div>
+                <div className="relative">
+                  <select
+                    value={filterType}
+                    onChange={e => handleFilterChange("type", e.target.value)}
+                    className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                  >
+                    {types.map((type) => (
+                      <option key={type} value={type} className="bg-[#1a1f2e] text-yellow-100">{type}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                </div>
+                <div className="relative">
+                  <select
+                    value={filterOperation}
+                    onChange={e => handleFilterChange("operation", e.target.value)}
+                    className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                  >
+                    {operations.map((op) => (
+                      <option key={op} value={op} className="bg-[#1a1f2e] text-yellow-100">{op}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    value={minPrice}
+                    onChange={e => setMinPrice(e.target.value)}
+                    placeholder="Precio mín."
+                    className="px-3 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    value={maxPrice}
+                    onChange={e => setMaxPrice(e.target.value)}
+                    placeholder="Precio máx."
+                    className="px-3 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all placeholder:text-white/50"
+                  />
+                </div>
+                <div className="relative">
+                  <select
+                    value={filterBedrooms}
+                    onChange={e => setFilterBedrooms(e.target.value)}
+                    className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                  >
+                    {bedrooms.map((n) => (
+                      <option key={n} value={n} className="bg-[#1a1f2e] text-yellow-100">{n} {n !== "Cualquiera" ? "hab" : ""}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                </div>
+                <div className="relative">
+                  <select
+                    value={filterBathrooms}
+                    onChange={e => setFilterBathrooms(e.target.value)}
+                    className="appearance-none w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-10"
+                  >
+                    {bathrooms.map((n) => (
+                      <option key={n} value={n} className="bg-[#1a1f2e] text-yellow-100">{n} {n !== "Cualquiera" ? "baños" : ""}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-yellow-400" size={18} />
+                </div>
               </div>
-            </div>
-          </motion.div>
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-white/10">
+                <div className="flex items-center gap-3">
+                  <span className="text-yellow-200 font-medium text-sm">Ordenar por:</span>
+                  <select
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value)}
+                    className="appearance-none px-3 py-2 rounded-lg border border-white/20 bg-white/10 text-yellow-100 focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 focus:bg-white/15 transition-all pr-8 text-sm"
+                  >
+                    <option value="price-desc" className="bg-[#1a1f2e] text-yellow-100">Precio (mayor a menor)</option>
+                    <option value="price-asc" className="bg-[#1a1f2e] text-yellow-100">Precio (menor a mayor)</option>
+                    <option value="rating" className="bg-[#1a1f2e] text-yellow-100">Mejor valoradas</option>
+                    <option value="area" className="bg-[#1a1f2e] text-yellow-100">Mayor superficie</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-yellow-200 font-medium text-sm mr-2">Vista:</span>
+                  {SIZE_OPTIONS.map(opt => (
+                    <button
+                      key={opt.key}
+                      className={`flex items-center gap-1 rounded-lg px-3 py-2 font-medium transition border text-sm ${
+                        cardSize === opt.key
+                          ? "bg-gradient-to-r from-yellow-400 to-yellow-300 text-[#1a1f2e] border-yellow-300 shadow-lg"
+                          : "bg-white/10 text-yellow-100 border-white/20 hover:bg-yellow-400/20"
+                      }`}
+                      onClick={() => setCardSize(opt.key)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
         </div>
       </div>
-
-            {/* Resultados */}
-            <div className="px-4 pb-16">
-        <div className="max-w-7xl mx-auto mb-8">
-          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-6 py-4">
-            <div className="flex justify-between items-center">
-              <div className="text-yellow-100">
-                <span className="font-bold text-lg">{filteredProperties.length}</span>
-                <span className="text-yellow-100/80 ml-2">propiedades encontradas</span>
-              </div>
-              <div className="flex items-center gap-4 text-sm text-yellow-100/70">
-                <span className="flex items-center gap-1">
-                  <Star className="w-4 h-4 text-yellow-400" />
-                  Propiedades destacadas: {filteredProperties.filter(isFeatured).length}
-                </span>
-              </div>
+      {/* --- MOBILE --- */}
+      {isMobile && (
+        <div className="max-w-4xl mx-auto flex flex-col gap-2 mb-4 px-2 mt-2">
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              <button
+                className={`flex items-center gap-1 rounded-lg px-3 py-2 font-medium transition border text-sm ${
+                  mobileView === "card"
+                    ? "bg-gradient-to-r from-yellow-400 to-yellow-300 text-[#1a1f2e] border-yellow-300 shadow-lg"
+                    : "bg-white/10 text-yellow-100 border-white/20 hover:bg-yellow-400/20"
+                }`}
+                onClick={() => setMobileView("card")}
+              >
+                <LayoutGrid size={16}/> Cards
+              </button>
+              <button
+                className={`flex items-center gap-1 rounded-lg px-3 py-2 font-medium transition border text-sm ${
+                  mobileView === "list"
+                    ? "bg-gradient-to-r from-yellow-400 to-yellow-300 text-[#1a1f2e] border-yellow-300 shadow-lg"
+                    : "bg-white/10 text-yellow-100 border-white/20 hover:bg-yellow-400/20"
+                }`}
+                onClick={() => setMobileView("list")}
+              >
+                <List size={16}/> Lista
+              </button>
+            </div>
+            <div className="text-yellow-200 text-sm flex flex-col items-end">
+              <span>
+                <b>{filteredProperties.length}</b> resultado{filteredProperties.length !== 1 ? 's' : ''}
+              </span>
+              <span className="flex items-center gap-1">
+                <Star className="w-4 h-4 text-yellow-400" />
+                Destacadas: {filteredProperties.filter(isFeatured).length}
+              </span>
             </div>
           </div>
         </div>
-
-        {/* Grid/lista de propiedades */}
+      )}
+      {/* Resultados */}
+      <div className="px-4 pb-16">
+        {!isMobile && (
+          <div className="max-w-7xl mx-auto mb-8">
+            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-6 py-4">
+              <div className="flex justify-between items-center">
+                <div className="text-yellow-100">
+                  <span className="font-bold text-lg">{filteredProperties.length}</span>
+                  <span className="text-yellow-100/80 ml-2">propiedades encontradas</span>
+                </div>
+                <div className="flex items-center gap-4 text-sm text-yellow-100/70">
+                  <span className="flex items-center gap-1">
+                    <Star className="w-4 h-4 text-yellow-400" />
+                    Propiedades destacadas: {filteredProperties.filter(isFeatured).length}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {loading ? (
           <div className="text-center text-yellow-100/70 py-20 text-xl">Cargando propiedades…</div>
         ) : isMobile && mobileView === "list" ? (
@@ -504,7 +651,7 @@ export default function PropertyExplorer() {
                   initial={{ y: 30, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: index * 0.1 }}
-                  className="flex bg-white/8 backdrop-blur-sm border border-white/15 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl hover:border-yellow-400/30 transition-all duration-300 relative group"
+                  className="flex bg-white/8 backdrop-blur-sm border border-white/15 rounded-2xl  overflow-hidden shadow-lg hover:shadow-2xl hover:border-yellow-400/30 transition-all duration-300 relative group"
                 >
                   {/* Imagen */}
                   <div className="min-w-[120px] w-32 h-32 relative">
@@ -636,7 +783,6 @@ export default function PropertyExplorer() {
                       <MapPin size={16} className="text-yellow-400 flex-shrink-0" />
                       <span className="truncate">{prop.location}</span>
                     </div>
-                    {/* Agente */}
                     <div className="flex items-center gap-2 mb-1">
                       <img
                         src={agent.photo}
@@ -646,7 +792,6 @@ export default function PropertyExplorer() {
                       />
                       <span className="text-yellow-200 text-xs">{agent.name}</span>
                     </div>
-                    {/* Wishlist/Consultas */}
                     <div className="flex gap-3 text-yellow-200/70 text-xs mb-3">
                       <span className="flex items-center gap-1"><Heart size={13} className="text-pink-400" /> {prop.wishlistCount || 0} wishlist</span>
                       <span className="flex items-center gap-1"><UserCircle size={13} className="text-blue-400" /> {prop.consultCount || 0} consultas</span>
@@ -679,7 +824,6 @@ export default function PropertyExplorer() {
           </div>
         )}
       </div>
-      {/* Footer con estadísticas */}
       <div className="bg-[#0f1419] border-t border-white/10 px-4 py-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-center">
